@@ -128,6 +128,12 @@ void HAL_UART_MspDeInit(UART_HandleTypeDef *huart)
 
 }
 
+void __io_putchar( char c )
+{
+    char tmp = c;
+    HAL_UART_Transmit(&UartHandle, (uint8_t *)&tmp, 1, 0xFFFF); 
+}
+
 int main(int argc, char **argv)
 {
     // From Projects/STM32F411RE-Nucleo/Examples/GPIO/GPIO_IOToggle/Src/main.c
@@ -193,6 +199,7 @@ int main(int argc, char **argv)
         HAL_UART_Transmit(&UartHandle, (uint8_t *)s, 1, 0xFFFF); 
         s++;
     }
+    printf("And hello again, using printf!\n");
 
     int pin = 1;
     while(1) {

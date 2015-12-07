@@ -162,6 +162,8 @@ SECTIONS
     __bss_end__ = _ebss;
   } >RAM
 
+  heap_low = .;
+
   /* User_heap_stack section, used to check that there is enough RAM left */
   ._user_heap_stack :
   {
@@ -169,10 +171,18 @@ SECTIONS
     PROVIDE ( end = . );
     PROVIDE ( _end = . );
     . = . + _Min_Heap_Size;
+    heap_top = .;
     . = . + _Min_Stack_Size;
     . = ALIGN(4);
   } >RAM
 
+
+  /* . = ALIGN(8); */
+  /*heap_low = .; *//* for _sbrk */
+  /*. = . + 0x10000; */ /* 64kB of heap memory */
+   /* heap_top = .; */ /* for _sbrk */
+  /*  . = . + 0x10000; */ /* 64kB of stack memory */
+    /*  stack_top = .; */ /* for startup.s */
   
 
   /* Remove information from the standard libraries */
