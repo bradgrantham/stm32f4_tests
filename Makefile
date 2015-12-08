@@ -25,7 +25,7 @@ OBJECTS = \
 uart.hex: uart.elf
 	$(TOOLROOT)/bin/arm-none-eabi-objcopy -O ihex $< $@
 
-uart.elf: uart.o $(OBJECTS)
+uart.elf:  $(OBJECTS) uart.o
 	$(TOOLROOT)/bin/arm-none-eabi-gcc $(OPT) $(CORTEX_M4_HWFP_CC_FLAGS) -DSTM32F415xx -L$(CORTEX_M4_HWFP_LIB_PATH) -TSTM32F415RG_FLASH.ld -lm -specs=nosys.specs -Wl,--gc-sections $^ -o $@
 
 simple_m4.hex: simple_m4.elf
