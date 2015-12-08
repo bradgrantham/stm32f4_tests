@@ -1194,6 +1194,14 @@ void HAL_UART_IRQHandler(UART_HandleTypeDef *huart)
     
     huart->ErrorCode |= HAL_UART_ERROR_ORE;
   }
+
+  if(huart->ErrorCode != HAL_UART_ERROR_NONE)
+  {
+    /* Set the UART state ready to be able to start again the process */
+    huart->State = HAL_UART_STATE_READY;
+    
+    HAL_UART_ErrorCallback(huart);
+  }  
   
   tmp1 = __HAL_UART_GET_FLAG(huart, UART_FLAG_RXNE);
   tmp2 = __HAL_UART_GET_IT_SOURCE(huart, UART_IT_RXNE);

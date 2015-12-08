@@ -151,6 +151,8 @@ void HAL_UART_MspDeInit(UART_HandleTypeDef *huart)
   HAL_GPIO_DeInit(GPIOB, GPIO_PIN_7);
 }
 
+// XXX Really need to enqueue and drain in interrupt handler
+// Or double-buffer two arrays for DMA
 void __io_putchar( char c )
 {
     char tmp = c;
@@ -160,17 +162,31 @@ void __io_putchar( char c )
         tmp1 = UartHandle.State;
     } while ((tmp1 == HAL_UART_STATE_BUSY_TX) || (tmp1 == HAL_UART_STATE_BUSY_TX_RX));
 
-    HAL_UART_Transmit(&UartHandle, (uint8_t *)&tmp, 1, 0xFFFF); 
+    if(HAL_UART_Transmit_IT(&UartHandle, (uint8_t *)&tmp, 1) != HAL_OK) {
+        ready_to_printf = 0;
+        Error_Handler();
+    }
 }
 
 volatile int char_next = 0;
 volatile char chars[1024];
+volatile unsigned int error_code = 0;
+
+void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
+{
+    error_code = UartHandle.ErrorCode;
+}
 
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
+    int result;
+    if(UartHandle.ErrorCode != HAL_UART_ERROR_NONE)
+        error_code = UartHandle.ErrorCode;
     char_next++;
-    HAL_UART_Receive_IT(&UartHandle, (uint8_t *)(chars + char_next), 1);
-    HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_1);
+    if((result = HAL_UART_Receive_IT(&UartHandle, (uint8_t *)(chars + char_next), 1)) != HAL_OK) {
+        error_code = UartHandle.State;
+    }
+    HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_1); // toggles on callback, not on success
 }
 
 int main(int argc, char **argv)
@@ -233,14 +249,7 @@ int main(int argc, char **argv)
 
     ready_to_printf = 1;
   
-    // printf("\n\r Hello UART");
-    const char hello[] = "\n\r Hello UART!!\n\r";
-    const char *s = hello;
-    while(*s) {
-        HAL_UART_Transmit(&UartHandle, (uint8_t *)s, 1, 0xFFFF); 
-        s++;
-    }
-    printf("And hello again, using printf!\n");
+    printf("UART test...\n");
 
     if(HAL_UART_Receive_IT(&UartHandle, (uint8_t *)&chars[0], 1) != HAL_OK)
     {
@@ -250,24 +259,41 @@ int main(int argc, char **argv)
 
     int pin = 1;
     int chars_so_far = 0;
-    int old_ticks = 0;
+    int then = 0;
+    int then2 = 0;
+
     while(1) {
-        if(ticks - old_ticks > 500) {
+        int now;
+        int tmp;
+
+        __disable_irq();
+        now = ticks;
+        __enable_irq();
+
+        if(now - then > 500) {
             HAL_GPIO_WritePin(GPIOC, GPIO_PIN_12, pin);
-            printf("ping\n");
             pin = pin ? 0 : 1;
-            old_ticks = ticks;
+            then = now;
         }
+
+        if(now - then2 > 2000) {
+            // printf("ping, %d\n", UartHandle.State);
+            then2 = now;
+        }
+
+        __disable_irq();
+        tmp = char_next;
+        __enable_irq();
+
     
-        while(char_next > chars_so_far) {
+        while(tmp > chars_so_far) {
             printf("received %d: %02X (%c)\n", chars_so_far, chars[chars_so_far], chars[chars_so_far]);
             chars_so_far++;
         }
-        if(UartHandle.ErrorCode != HAL_UART_ERROR_NONE) {
-            printf("UART error code 0x%04x\n", UartHandle.ErrorCode);
+
+        if(error_code != HAL_UART_ERROR_NONE) {
+            printf("UART error code 0x%04x\n", error_code);
             Error_Handler();
         }
-
     }
 }
-
