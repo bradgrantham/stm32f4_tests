@@ -3,16 +3,32 @@
 static GPIO_InitTypeDef  GPIO_InitStruct;
 static UART_HandleTypeDef UartHandle;
 
+static uint32_t ticks = 0;
+
+void HAL_IncTick(void)
+{
+    ticks++;
+}
+
 // From Projects/STM32F411RE-Nucleo/Examples/GPIO/GPIO_IOToggle/Src/main.c
 /**
   * @brief  This function is executed in case of error occurrence.
   * @param  None
   * @retval None
   */
+int ready_to_printf = 0;
 static void Error_Handler(void)
 {
     HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, 1);
-    while(1);
+
+    if(ready_to_printf)
+        printf("Error Handler...\n");
+
+    while(1) {
+        /* delay */
+        HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
+        HAL_Delay(500);
+    }
 }
 
 // From Projects/STM32F411RE-Nucleo/Examples/GPIO/GPIO_IOToggle/Src/main.c
@@ -77,9 +93,13 @@ static void SystemClock_Config(void)
   }
 }
 
+void USART1_IRQHandler(void)
+{
+  HAL_UART_IRQHandler(&UartHandle);
+}
 
 void HAL_UART_MspInit(UART_HandleTypeDef *huart)
-{  
+{
   GPIO_InitTypeDef  GPIO_InitStruct;
   
   /*##-1- Enable peripherals and GPIO Clocks #################################*/
@@ -104,6 +124,10 @@ void HAL_UART_MspInit(UART_HandleTypeDef *huart)
   GPIO_InitStruct.Alternate = GPIO_AF7_USART1;
     
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+  /* NVIC for USART */
+  HAL_NVIC_SetPriority(USART1_IRQn, 0, 1);
+  HAL_NVIC_EnableIRQ(USART1_IRQn);
 }
 
 /**
@@ -125,13 +149,28 @@ void HAL_UART_MspDeInit(UART_HandleTypeDef *huart)
   HAL_GPIO_DeInit(GPIOB, GPIO_PIN_6);
   /* Configure UART Rx as alternate function  */
   HAL_GPIO_DeInit(GPIOB, GPIO_PIN_7);
-
 }
 
 void __io_putchar( char c )
 {
     char tmp = c;
+
+    uint32_t tmp1 = 0;
+    do {
+        tmp1 = UartHandle.State;
+    } while ((tmp1 == HAL_UART_STATE_BUSY_TX) || (tmp1 == HAL_UART_STATE_BUSY_TX_RX));
+
     HAL_UART_Transmit(&UartHandle, (uint8_t *)&tmp, 1, 0xFFFF); 
+}
+
+volatile int char_next = 0;
+volatile char chars[1024];
+
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
+{
+    char_next++;
+    HAL_UART_Receive_IT(&UartHandle, (uint8_t *)(chars + char_next), 1);
+    HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_1);
 }
 
 int main(int argc, char **argv)
@@ -174,11 +213,11 @@ int main(int argc, char **argv)
         - Word Length = 8 Bits
         - Stop Bit = One Stop bit
         - Parity = ODD parity
-        - BaudRate = 9600 baud
+        - BaudRate = 115200 baud
         - Hardware flow control disabled (RTS and CTS signals) */
     UartHandle.Instance          = USART1;
     
-    UartHandle.Init.BaudRate     = 9600;
+    UartHandle.Init.BaudRate     = 115200;
     UartHandle.Init.WordLength   = UART_WORDLENGTH_8B;
     UartHandle.Init.StopBits     = UART_STOPBITS_1;
     UartHandle.Init.Parity       = UART_PARITY_NONE;
@@ -191,6 +230,8 @@ int main(int argc, char **argv)
       /* Initialization Error */
       Error_Handler(); 
     }
+
+    ready_to_printf = 1;
   
     // printf("\n\r Hello UART");
     const char hello[] = "\n\r Hello UART!!\n\r";
@@ -201,12 +242,32 @@ int main(int argc, char **argv)
     }
     printf("And hello again, using printf!\n");
 
+    if(HAL_UART_Receive_IT(&UartHandle, (uint8_t *)&chars[0], 1) != HAL_OK)
+    {
+      /* Transfer error in reception process */
+      Error_Handler();
+    }
+
     int pin = 1;
+    int chars_so_far = 0;
+    int old_ticks = 0;
     while(1) {
-        HAL_GPIO_WritePin(GPIOC, GPIO_PIN_12, pin);
-        pin = pin ? 0 : 1;
+        if(ticks - old_ticks > 500) {
+            HAL_GPIO_WritePin(GPIOC, GPIO_PIN_12, pin);
+            printf("ping\n");
+            pin = pin ? 0 : 1;
+            old_ticks = ticks;
+        }
     
-        /* delay */
-        HAL_Delay(500);
+        while(char_next > chars_so_far) {
+            printf("received %d: %02X (%c)\n", chars_so_far, chars[chars_so_far], chars[chars_so_far]);
+            chars_so_far++;
+        }
+        if(UartHandle.ErrorCode != HAL_UART_ERROR_NONE) {
+            printf("UART error code 0x%04x\n", UartHandle.ErrorCode);
+            Error_Handler();
+        }
+
     }
 }
+
