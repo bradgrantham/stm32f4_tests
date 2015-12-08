@@ -509,7 +509,6 @@ HAL_StatusTypeDef HAL_UART_DeInit(UART_HandleTypeDef *huart)
   return HAL_OK;
 }
 
-#if 0
 /**
   * @brief  UART MSP Init.
   * @param  huart: pointer to a UART_HandleTypeDef structure that contains
@@ -535,7 +534,6 @@ HAL_StatusTypeDef HAL_UART_DeInit(UART_HandleTypeDef *huart)
            the HAL_UART_MspDeInit could be implemented in the user file
    */ 
 }
-#endif
 
 
 /**
